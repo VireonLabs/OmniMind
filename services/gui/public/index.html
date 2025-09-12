@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="KUBRA / AURA AI — Dashboard متقدمة وتفاعلية" />
+    <meta name="theme-color" content="#101c33" />
+    <title>KUBRA / AURA — Dashboard</title>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
+
+    <!-- PWA manifest -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <style>
+      /* Reset & Body */
+      html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; font-family: 'Orbitron', sans-serif; }
+      body { background-color:#101c33; transition: background-color 0.3s ease, color 0.3s ease; }
+
+      /* Splash Screen */
+      #splash {
+        position: fixed; inset:0; z-index:9999;
+        background:#101c33; display:flex;
+        align-items:center; justify-content:center;
+        flex-direction:column; color:#38c0fc;
+        font-size:1.5rem; font-weight:bold;
+        transition: opacity 0.5s ease;
+      }
+      #splash.fade { opacity:0; pointer-events:none; }
+
+      /* NeuroGrid Canvas */
+      #neuro-grid { position:fixed; inset:0; z-index:-1; pointer-events:none; }
+    </style>
+  </head>
+
+  <body>
+    <!-- NeuroGrid background -->
+    <canvas id="neuro-grid"></canvas>
+
+    <!-- Splash Screen -->
+    <div id="splash">KUBRA / AURA AI — جاري التحميل...</div>
+
+    <!-- React root -->
+    <div id="root"></div>
+
+    <!-- NeuroGrid Script -->
+    <script>
+      (function(){
+        const canvas = document.getElementById('neuro-grid');
+        const gl = canvas.getContext('webgl');
+        if(!gl) return;
+
+        function resize() {
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.floor(window.innerWidth * dpr);
+          canvas.height = Math.floor(window.innerHeight * dpr);
+          canvas.style.width = window.innerWidth + 'px';
+          canvas.style.height = window.innerHeight + 'px';
+          gl.viewport(0,0,canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const vs = `
+          attribute vec2 aPos;
+          varying vec2 vUv;
+          void main(){ vUv = aPos*0.5+0.5; gl_Position = vec4(aPos,0.0,1.0); }
+        `;
+        const fs = `
+          precision highp float;
+          varying vec2 vUv;
+          uniform float uTime;
+          uniform vec2 uRes;
+          uniform float uActivity;
+
+          float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
+          float noise(vec2 p){
+            vec2 i = floor(p); vec2 f = fract(p);
+            float a = hash(i); float b = hash(i+vec2(1.0,0.0));
+            float c = hash(i+vec2(0.0,1.0)); float d = hash(i+vec2(1.0,1.0));
+            vec2 u = f*f*(3.0-2.0*f);
+            return mix(a,b,u.x)+(c-a)*u.y*(1.0-u.x)+(d-b)*u.x*u.y;
+          }
+
+          void main(){
+            vec2 uv = vUv; vec2 p = uv*(uRes/uRes.y); float t=uTime*0.2;
+            vec2 gv = fract(p*8.0 + vec2(t*0.2, t*0.1)); vec2 id=floor(p*8.0 + vec2(t*0.2, t*0.1));
+            float n = noise(id*0.5+t*0.1);
+            vec2 g = abs(fract(p*8.0)-0.5);
+            float line = smoothstep(0.02,0.01,min(g.x,g.y));
+            float pulse=0.2+0.8*uActivity;
+            float glow=exp(-10.0*(length(uv-vec2(0.5))))*pulse;
+            vec3 base = mix(vec3(0.03,0.08,0.14), vec3(0.03,0.12,0.2), n*0.6);
+            vec3 accent = vec3(0.22,0.72,0.98)*(0.4+0.6*line)*(0.3+0.7*uActivity);
+            vec3 col = base+accent*(line+glow*0.8);
+            float n2 = noise(p*20.0+t*0.5);
+            col += 0.02*vec3(n2);
+            gl_FragColor = vec4(col,1.0);
+          }
+        `;
+
+        function compile(src,type){
+          const s=gl.createShader(type);
+          gl.shaderSource(s,src); gl.compileShader(s);
+          if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+          return s;
+        }
+        const prog=gl.createProgram();
+        gl.attachShader(prog,compile(vs,gl.VERTEX_SHADER));
+        gl.attachShader(prog,compile(fs,gl.FRAGMENT_SHADER));
+        gl.linkProgram(prog);
+        if(!gl.getProgramParameter(prog,gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(prog));
+
+        const quad=new Float32Array([-1,-1,1,-1,-1,1,1,1]);
+        const buf=gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+        gl.bufferData(gl.ARRAY_BUFFER,quad,gl.STATIC_DRAW);
+        const aPos=gl.getAttribLocation(prog,'aPos');
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+
+        const uTime=gl.getUniformLocation(prog,'uTime');
+        const uRes=gl.getUniformLocation(prog,'uRes');
+        const uActivity=gl.getUniformLocation(prog,'uActivity');
+
+        let start=performance.now(), activity=0.0;
+        window.setNeuroActivity=v=>{activity=Math.max(0,Math.min(1,v));};
+        let demoT=0;
+        function frame(){
+          demoT+=0.01;
+          const demoActivity=0.15+0.25*(0.5+0.5*Math.sin(demoT));
+          const effectiveActivity=Math.max(activity,demoActivity);
+          gl.useProgram(prog);
+          const now=(performance.now()-start)/1000;
+          gl.uniform1f(uTime,now);
+          gl.uniform2f(uRes,canvas.width,canvas.height);
+          gl.uniform1f(uActivity,effectiveActivity);
+          gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+        window.pulseNeuro=(strength=1.0,decay=600)=>{
+          activity=Math.max(activity,Math.min(1,strength));
+          const startAt=Date.now();
+          const id=setInterval(()=>{
+            const elapsed=Date.now()-startAt;
+            const t=elapsed/decay;
+            activity=Math.max(0,activity*(1-t));
+            if(t>=1) clearInterval(id);
+          },50);
+        };
+        window.pulseNeuro(0.6,900);
+      })();
+    </script>
+
+    <!-- Splash fadeout -->
+    <script>
+      window.addEventListener('load',()=>{
+        const splash=document.getElementById('splash');
+        if(splash) splash.classList.add('fade');
+      });
+    </script>
+
+  </body>
+  </html>

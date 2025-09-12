@@ -1,0 +1,89 @@
+version: "3.9"
+
+networks:
+  app-network:
+    driver: bridge
+
+services:
+  # ===============================
+  # خدمة API الرئيسية
+  # ===============================
+  api:
+    build: ./services/api
+    env_file:
+      - .env
+    ports:
+      - "${API_PORT:-8500}:8500"
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8500/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - app-network
+
+  # ===============================
+  # Consolidation Worker
+  # ===============================
+  worker:
+    build: ./services/api
+    command: ["python", "-m", "services.model.consolidation"]
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q '[p]ython -m services.model.consolidation'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - app-network
+
+  # ===============================
+  # واجهة المستخدم GUI
+  # ===============================
+  gui:
+    build: ./services/gui
+    env_file:
+      - .env
+    environment:
+      - REACT_APP_API_URL=http://api:${API_PORT:-8500}
+      - REACT_APP_API_KEY=${API_KEY}
+    ports:
+      - "${GUI_PORT:-8000}:8000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - app-network

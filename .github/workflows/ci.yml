@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "release/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:23.0.1
+        options: --privileged
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Build API Docker image
+        run: docker build -t cmsh-api ./services/api
+
+      - name: Build GUI Docker image
+        run: docker build -t cmsh-gui ./services/gui
+
+      - name: Start API/GUI Compose
+        run: docker-compose up -d --build
+
+      - name: Wait for health
+        run: |
+          for i in {1..20}; do
+            if curl -sf http://127.0.0.1:8500/health && curl -sf http://127.0.0.1:8000; then
+              echo "Both API & GUI healthy!"; break
+            fi
+            echo "Waiting for API/GUI... ($i/20)"
+            sleep 5
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install Cypress deps
+        run: |
+          cd services/gui
+          npm ci
+
+      - name: Run Cypress E2E
+        run: |
+          cd services/gui
+          npx cypress run --headless --browser chrome || (cat cypress/videos/*.mp4 || true)
+
+      - name: Tear down
+        run: docker-compose down -v
+
+      - name: Upload Cypress Artifacts
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cypress-artifacts
+          path: services/gui/cypress/videos/

@@ -1,0 +1,33 @@
+{
+  "name": "cmsh-gui",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "REACT_APP_API_URL=$REACT_APP_API_URL REACT_APP_API_KEY=$REACT_APP_API_KEY react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.10.4",
+    "@emotion/styled": "^11.10.4",
+    "@mui/icons-material": "^5.16.0",
+    "@mui/material": "^5.16.0",
+    "@mui/x-data-grid": "^6.20.0",
+    "axios": "^1.4.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "recharts": "^2.8.0",
+    "styled-components": "^6.0.5",
+    "framer-motion": "^7.6.14",
+    "react-i18next": "^13.0.0",
+    "i18next": "^23.5.0"
+  },
+  "devDependencies": {
+    "cypress": "^13.6.2",
+    "cypress-file-upload": "^5.0.8"
+  }
+}
