@@ -14,25 +14,31 @@ jobs:
         image: docker:23.0.1
         options: --privileged
     steps:
+      # Checkout the repo
       - uses: actions/checkout@v3
 
+      # Setup Python environment
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
+      # Install Python dependencies
       - name: Install deps
         run: pip install -r requirements.txt
 
+      # Build Docker images
       - name: Build API Docker image
         run: docker build -t cmsh-api ./services/api
 
       - name: Build GUI Docker image
         run: docker build -t cmsh-gui ./services/gui
 
+      # Start services using docker-compose
       - name: Start API/GUI Compose
         run: docker-compose up -d --build
 
+      # Wait until API & GUI are healthy
       - name: Wait for health
         run: |
           for i in {1..20}; do
@@ -43,27 +49,32 @@ jobs:
             sleep 5
           done
 
+      # Setup Node.js for Cypress
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
 
+      # Install Cypress dependencies
       - name: Install Cypress deps
         run: |
           cd services/gui
           npm ci
 
+      # Run Cypress end-to-end tests
       - name: Run Cypress E2E
         run: |
           cd services/gui
           npx cypress run --headless --browser chrome || (cat cypress/videos/*.mp4 || true)
 
+      # Tear down Docker containers
       - name: Tear down
         run: docker-compose down -v
 
+      # Upload Cypress videos/artifacts on failure
       - name: Upload Cypress Artifacts
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cypress-artifacts
           path: services/gui/cypress/videos/
